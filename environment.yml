@@ -1,0 +1,7 @@
+name: wizgram
+dependencies:
+ - python=3.5
+ - pip:
+   - telepot
+   - coloredlogs
+   - aiohttp
