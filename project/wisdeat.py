@@ -57,7 +57,12 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
             img = BytesIO()
             await self.bot.download_file(file_id, img)
             resp = await self.req(img, 'FR')
-            msg = WisdeatBot.pretty_print_reco(resp)
+
+            if resp['state'] in {'OCR_ERROR', 'PRODUCTS_AREA_NOT_DETECTED', 'STORE_NOT_DETECTED'}:
+                msg = 'An error occurred during the recognition :('
+            else:
+                msg = WisdeatBot.pretty_print_reco(resp)
+            print(msg)
 
         else:
             msg = 'send a picture to get it recognized'
@@ -113,17 +118,23 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
                 await asyncio.sleep(1)
             else:
                 raise RecoFailedError()
+
         return resp
 
     @staticmethod
     def pretty_print_reco(resp):
-        store = '*{store_type}* {city} - {zipcode} - {address}'.format(**resp['result']['store'])
+        store = '*{type_store}* {city} - {zipcode} - {address}'.format(
+                    type_store=resp['result']['store']['store_type'].title(),
+                    **resp['result']['store'])
         products = ['*Products*:']
         for product in resp['result']['products']:
             products.append('\n - *{name}*:'.format(**product['raw']))
-            for match in product['matches'][:2]:
-                products.append('\t ({score:.2f}) {brand_name} - {name} ({price:.2f})'.format(
-                    **match, brand_name=match['brand']['name']))
+            if product['valid']:
+                products.append('\t ({score:.2f}){brand_name} - {name} ({price:.2f})'.format(
+                    **product['valid'], brand_name=product['valid']['brand']['name'] or ''))
+                for match in product['matches'][:1]:
+                    products.append('\t ({score:.2f}){brand_name} - {name} ({price:.2f})'.format(
+                        **match, brand_name=match['brand']['name'] or ''))
         return '\n'.join([store] + products)
 
 
