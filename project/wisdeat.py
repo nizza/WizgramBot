@@ -1,6 +1,8 @@
 import telepot.aio
 from telepot.aio.delegate import (per_chat_id, create_open,
-                                  pave_event_space)
+                                  pave_event_space, per_callback_query_origin)
+from telepot.namedtuple import InlineKeyboardMarkup, InlineKeyboardButton
+from telepot import glance
 import aiohttp
 import asyncio
 import async_timeout
@@ -8,7 +10,12 @@ import json
 from enum import Enum
 from operator import itemgetter
 from io import BytesIO
+
 from typing import Tuple
+
+
+from .logs import logger
+from .dbs import add_reco, add_feedback
 
 image_size = itemgetter('file_size')
 
@@ -49,9 +56,13 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
     async def on_chat_message(self, msg):
 
         content_type, chat_type, chat_id = telepot.glance(msg)
-        print(content_type, chat_type, chat_id)
+        logger.info((content_type, chat_type, chat_id))
 
-        if content_type == 'photo':
+        if content_type != 'photo':
+            await self.sender.sendMessage('send a picture to get it recognized',
+                                          parse_mode='Markdown')
+
+        else:
             file_id = sorted(msg['photo'], key=image_size)[-1]['file_id']
             await self.sender.sendMessage('Starting reco ...')
             img = BytesIO()
@@ -62,13 +73,20 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
                 msg = 'An error occurred during the recognition :('
             else:
                 msg = WisdeatBot.pretty_print_reco(resp)
-            print(msg)
+            logger.info(msg)
+            add_reco(chat_id, resp, img)
 
-        else:
-            msg = 'send a picture to get it recognized'
+            await self.sender.sendMessage(msg, parse_mode='Markdown')
 
-        # "Markdown"
-        await self.sender.sendMessage(msg, parse_mode='Markdown')
+            _ = await self.sender.sendMessage(
+                'Rate the recognition',
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[[
+                        InlineKeyboardButton(text='\u2600', callback_data='1'),
+                        InlineKeyboardButton(text='\u2600' * 2, callback_data='2'),
+                        InlineKeyboardButton(text='\u2600' * 3, callback_data='3')]
+                    ]))
+
         self.close()
 
     @staticmethod
@@ -82,7 +100,6 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
     @staticmethod
     async def recognize_receipt(session, img, country,
                                 timeout=10):
-
         img.seek(0)
         with async_timeout.timeout(timeout):
             files = {'file': img}
@@ -138,6 +155,23 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
         return '\n'.join([store] + products)
 
 
+class RecoManager(telepot.aio.helper.CallbackQueryOriginHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    async def on_callback_query(self, msg):
+        query_id, from_id, feedback = glance(msg, flavor='callback_query')
+        add_feedback(from_id, feedback)
+        logger.info('{}: {}'.format(from_id, feedback))
+
+        await self.editor.editMessageText('Thanks for your feedback!', reply_markup=None)
+        self.close()
+
+    async def on__idle(self, event):
+        await self.editor.editMessageText('', reply_markup=None)
+        self.close()
+
+
 class UserHandler(telepot.aio.DelegatorBot):
 
     def __init__(self, token, loop, email, password, **kwargs):
@@ -156,7 +190,9 @@ class UserHandler(telepot.aio.DelegatorBot):
         }
         super().__init__(token,  [
             pave_event_space()(
-                per_chat_id(), create_open, WisdeatBot, loop, user, timeout=10)
+                per_chat_id(), create_open, WisdeatBot, loop, user, timeout=10),
+            pave_event_space()(
+                per_callback_query_origin(), create_open, RecoManager, timeout=30),
         ], loop=loop)
 
 

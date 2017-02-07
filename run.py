@@ -1,8 +1,10 @@
 import argparse
 import asyncio
+import sqlite3
 
 from project.logs import logger
-from project import UserHandler
+from project import (UserHandler, start_thread,
+                     create_table)
 
 parser = argparse.ArgumentParser('WizGram Bot')
 parser.add_argument('--token', required=True)
@@ -17,7 +19,14 @@ def main(options):
         options (dict):
 
     """
+    try:
+        create_table()
+    except sqlite3.OperationalError:
+        logger.warning('Table already exists')
+
     loop = asyncio.get_event_loop()
+    logger.info('Starting thread ...')
+    start_thread()
 
     bot = UserHandler(**options, loop=loop)
     loop.create_task(bot.message_loop())
