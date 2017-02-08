@@ -16,6 +16,7 @@ from typing import Tuple
 
 from .logs import logger
 from .dbs import add_reco, add_feedback
+from .utils import get_chunks
 
 image_size = itemgetter('file_size')
 
@@ -69,23 +70,28 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
             await self.bot.download_file(file_id, img)
             resp = await self.req(img, 'FR')
 
+            is_error = False
             if resp['state'] in {'OCR_ERROR', 'PRODUCTS_AREA_NOT_DETECTED', 'STORE_NOT_DETECTED'}:
                 msg = 'An error occurred during the recognition :('
+                is_error = True
             else:
                 msg = WisdeatBot.pretty_print_reco(resp)
+
             logger.info(msg)
             add_reco(chat_id, resp, img)
 
-            await self.sender.sendMessage(msg, parse_mode='Markdown')
+            for chunk in get_chunks(msg, 4000):
+                await self.sender.sendMessage(chunk, parse_mode='Markdown')
 
-            _ = await self.sender.sendMessage(
-                'Rate the recognition',
-                reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[[
-                        InlineKeyboardButton(text='\u2600', callback_data='1'),
-                        InlineKeyboardButton(text='\u2600' * 2, callback_data='2'),
-                        InlineKeyboardButton(text='\u2600' * 3, callback_data='3')]
-                    ]))
+            if not is_error:
+                _ = await self.sender.sendMessage(
+                    'How would you rate the recognition ?',
+                    reply_markup=InlineKeyboardMarkup(
+                        inline_keyboard=[[
+                            InlineKeyboardButton(text='\u2600', callback_data='1'),
+                            InlineKeyboardButton(text='\u2600' * 2, callback_data='2'),
+                            InlineKeyboardButton(text='\u2600' * 3, callback_data='3')]
+                        ]))
 
         self.close()
 
@@ -145,7 +151,7 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
                     **resp['result']['store'])
         products = ['*Products*:']
         for product in resp['result']['products']:
-            products.append('\n - *{name}*:'.format(**product['raw']))
+            products.append('\n - *{name}*:'.format(name=product['raw']['name'].replace('*', '')))
             if product['valid']:
                 products.append('\t ({score:.2f}){brand_name} - {name} ({price:.2f})'.format(
                     **product['valid'], brand_name=product['valid']['brand']['name'] or ''))
@@ -192,7 +198,7 @@ class UserHandler(telepot.aio.DelegatorBot):
             pave_event_space()(
                 per_chat_id(), create_open, WisdeatBot, loop, user, timeout=10),
             pave_event_space()(
-                per_callback_query_origin(), create_open, RecoManager, timeout=30),
+                per_callback_query_origin(), create_open, RecoManager, timeout=120),
         ], loop=loop)
 
 
