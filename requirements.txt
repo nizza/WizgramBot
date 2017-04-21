@@ -1,3 +1,5 @@
 aiohttp==1.2.0
 coloredlogs==5.2
 telepot==10.4
+rethinkdb==2.3.0.post6
+pytz==2017.2

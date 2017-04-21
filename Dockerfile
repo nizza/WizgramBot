@@ -12,9 +12,6 @@ RUN  cp docker_build/code/* ./ -r && \
      cd docker_build && \
      pip install -r requirements.txt && \
      chown -R user:user /app
-RUN mkdir /db && chown -R user:user /db
-
-VOLUME /db
 
 USER user
 

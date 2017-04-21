@@ -59,7 +59,10 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
         content_type, chat_type, chat_id = telepot.glance(msg)
         logger.info((content_type, chat_type, chat_id))
 
-        if content_type != 'photo':
+        if content_type == 'text' and msg['text'] == '/id':
+            await self.sender.sendMessage('Your id is: *{}*'.format(chat_id),
+                                          parse_mode='Markdown')
+        elif content_type != 'photo':
             await self.sender.sendMessage('send a picture to get it recognized',
                                           parse_mode='Markdown')
 

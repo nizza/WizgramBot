@@ -1,30 +1,17 @@
-import sqlite3
-import os
+import rethinkdb as rdb
 import threading
 import queue
 import datetime as dt
 import json
+from functools import partial
+import pytz
 
 from .logs import logger
 
-db_name = 'users.db'
-db_folder = (os.environ.get('DB_PATH') or
-             os.path.join(os.path.dirname(__file__),  '..', 'db'))
-db_path = os.path.join(db_folder, db_name)
-
+TABLE = 'telegram'
 reco_queue = queue.Queue()
 
-
-def create_table():
-    logger.info('Connecting to {}'.format(db_path))
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE users
-                 (date DATE , user text, feedback INT,
-                  reco text, img BLOB)
-              ''')
-    conn.commit()
-    conn.close()
+tz = pytz.timezone('Europe/Paris')
 
 
 def add_reco(user, reco, img):
@@ -36,46 +23,47 @@ def add_feedback(user, feedback):
     reco_queue.put(('feedback', (user, feedback)))
 
 
-def save_feedback(user, feedback, c):
-    c.execute('''
-    UPDATE users
-       SET feedback = {feedback}
-     WHERE user = {user} AND date IN (
-      SELECT date
-      FROM users
-      ORDER BY date DESC
-      LIMIT 1
-    )
-    '''.format(user=user, feedback=int(feedback)))
+def save_feedback(user, feedback, conn):
+    req = (rdb.table(TABLE)
+              .get_all(user, index='user')
+              .order_by(rdb.desc('uploaded_at'))[0]
+              .update({'feedback': int(feedback)})
+           )
+
+    return req.run(conn)
 
 
-def save_reco(user, reco, img, c):
-    date = dt.datetime.now().isoformat()
-    c.execute('INSERT INTO users VALUES (?,?,?,?,?)',
-              (date, user, None, reco, img))
+def save_reco(user, reco, img, conn):
+    date = dt.datetime.now(tz=tz)
+
+    req = rdb.table(TABLE).insert({
+        'uploaded_at': date,
+        'user': user,
+        'img': img,
+        'reco': json.loads(reco),
+        'feedback': None
+    })
+    return req.run(conn)
 
 
-def worker():
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
+def worker(host, port, db):
+    logger.info('Connecting to rethinkdb ...')
+    conn = rdb.connect(host, port, db, timeout=10)
+    logger.info('connected !')
 
     while True:
         data_type, data = reco_queue.get()
         if data_type == 'reco':
             user, reco, img = data
-            save_reco(user, reco, img, c)
+            _ = save_reco(user, reco, img, conn)
         else:
             user, feedback = data
-            save_feedback(user, feedback, c)
-        conn.commit()
-
-    conn.close()
+            _ = save_feedback(user, feedback, conn)
 
 
-def start_thread():
-    t = threading.Thread(target=worker)
+def start_thread(host, port, db, **kwargs):
+
+    w = partial(worker, host=host, port=port, db=db)
+    t = threading.Thread(target=w)
     t.daemon = True
     t.start()
-
-if __name__ == '__main__':
-    create_table()

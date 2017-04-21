@@ -1,7 +1,9 @@
 name: wizgram
 dependencies:
  - python=3.5
+ - pytz
  - pip:
    - telepot
    - coloredlogs
    - aiohttp
+   - rethinkdb
