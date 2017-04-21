@@ -75,14 +75,17 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
 
             is_error = False
             if resp['state'] in {'OCR_ERROR', 'PRODUCTS_AREA_NOT_DETECTED', 'STORE_NOT_DETECTED'}:
-                msg = 'An error occurred during the recognition :('
+                msg = 'An error occurred during the recognition : *%s*' % resp['state'].replace('_', ' ').lower()
+                is_error = True
+            elif resp['state'] == 'FAILURE':
+                msg = 'An internal error happened :('
                 is_error = True
             else:
+                logger.info(resp)
+                add_reco(chat_id, resp, img)
                 msg = WisdeatBot.pretty_print_reco(resp)
 
             logger.info(msg)
-            add_reco(chat_id, resp, img)
-
             for chunk in get_chunks(msg, 4000):
                 await self.sender.sendMessage(chunk, parse_mode='Markdown')
 
