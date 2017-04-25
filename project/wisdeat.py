@@ -81,7 +81,6 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
                 msg = 'An internal error happened :('
                 is_error = True
             else:
-                logger.info(resp)
                 add_reco(chat_id, resp, img)
                 msg = WisdeatBot.pretty_print_reco(resp)
 

@@ -30,7 +30,7 @@ def save_feedback(user, feedback, conn):
               .update({'feedback': int(feedback)})
            )
 
-    return req.run(conn)
+    return safe_index(req, conn)
 
 
 def save_reco(user, reco, img, conn):
@@ -43,7 +43,7 @@ def save_reco(user, reco, img, conn):
         'reco': json.loads(reco),
         'feedback': None
     })
-    return req.run(conn)
+    return safe_index(req, conn)
 
 
 def worker(host, port, db):
