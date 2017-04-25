@@ -6,6 +6,7 @@ import json
 from functools import partial
 import pytz
 
+from .utils import safe_index
 from .logs import logger
 
 TABLE = 'telegram'
