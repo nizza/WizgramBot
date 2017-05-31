@@ -12,7 +12,7 @@ from operator import itemgetter
 from io import BytesIO
 
 from .logs import logger
-from .dbs import add_reco, add_feedback
+from .dbs import add_reco, add_feedback, add_app_feedback
 from .utils import get_chunks
 
 image_size = itemgetter('file_size')
@@ -22,7 +22,7 @@ Functionalities and commands:
 
 1. Upload a picture of a receipt to get it recognized
 2. `/id` to get your Telegram ID and sync all your receipts with the website (in the __Profile__ section)
-3. `/feedback` to send us your feedback !
+3. `/feedback` to send us your feedback on the app!
 """
 
 
@@ -65,10 +65,14 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
         """
         """
         resp, reply_markup = None, None
+
         if content_type == 'text':
             text = msg['text']
             if self._is_feedback:
                 self._is_feedback = False
+                if text:
+                    add_app_feedback(chat_id, text)
+                    resp = 'Well noted! Thanks :)'
             elif text == '/id':
                 resp = 'Your id is: *{}*'.format(chat_id)
             elif text == '/feedback':
@@ -117,8 +121,6 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
         content_type, chat_type, chat_id = telepot.glance(msg)
         logger.info((content_type, chat_type, chat_id))
 
-        print(self._is_feedback)
-
         to_send, reply_markup = await self._get_response(content_type, chat_id, msg)
         if not to_send:
             to_send = 'Send a picture to get it recognized'
@@ -133,7 +135,9 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
             await self.sender.sendMessage(to_send,
                                           reply_markup=reply_markup,
                                           parse_mode='Markdown')
-        self.close()
+
+        if not self._is_feedback:
+            self.close()
 
     @staticmethod
     async def get_task(session, task_id, timeout):
@@ -236,7 +240,7 @@ class UserHandler(telepot.aio.DelegatorBot):
         }
         super().__init__(token,  [
             pave_event_space()(
-                per_chat_id(), create_open, WisdeatBot, loop, user, timeout=10),
+                per_chat_id(), create_open, WisdeatBot, loop, user, timeout=60),
             pave_event_space()(
                 per_callback_query_origin(), create_open, RecoManager, timeout=120),
         ], loop=loop)

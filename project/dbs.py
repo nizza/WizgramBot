@@ -10,6 +10,7 @@ from .utils import safe_index
 from .logs import logger
 
 TABLE = 'telegram'
+FEEDBACK_TABLE = 'feedback'
 reco_queue = queue.Queue()
 
 tz = pytz.timezone('Europe/Paris')
@@ -20,8 +21,26 @@ def add_reco(user, reco, img):
     reco_queue.put(('reco', (user, json.dumps(reco), img.read())))
 
 
+def add_app_feedback(user, feedback):
+    reco_queue.put(('feedback_app', (user, feedback)))
+
+
 def add_feedback(user, feedback):
     reco_queue.put(('feedback', (user, feedback)))
+
+
+def save_app_feedback(user, feedback, conn):
+    feedback = {
+        'user': user,
+        'feedback': feedback,
+        'app': 'telegram',
+        'uploaded_at': dt.datetime.now(tz=tz)
+    }
+    req = rdb.table(FEEDBACK_TABLE).insert(feedback)
+    try:
+        safe_index(req, conn)
+    except rdb.ReqlNonExistenceError:
+        logger.warning('Could not save feedback...')
 
 
 def save_feedback(user, feedback, conn):
@@ -59,10 +78,14 @@ def worker(host, port, db):
         if data_type == 'reco':
             user, reco, img = data
             _ = save_reco(user, reco, img, conn)
-        else:
+        elif data_type == 'feedback':
             user, feedback = data
             save_feedback(user, feedback, conn)
-
+        elif data_type == 'feedback_app':
+            user, feedback = data
+            save_app_feedback(user, feedback, conn)
+        else:
+            raise NotImplementedError("Data type '{}' not implemented".format(data_type))
 
 def start_thread(host, port, db, **kwargs):
 
