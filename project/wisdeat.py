@@ -11,14 +11,19 @@ from enum import Enum
 from operator import itemgetter
 from io import BytesIO
 
-from typing import Tuple
-
-
 from .logs import logger
 from .dbs import add_reco, add_feedback
 from .utils import get_chunks
 
 image_size = itemgetter('file_size')
+
+start_msg = """
+Functionalities and commands:
+
+1. Upload a picture of a receipt to get it recognized
+2. `/id` to get your Telegram ID and sync all your receipts with the website (in the __Profile__ section)
+3. `/feedback` to send us your feedback !
+"""
 
 
 class API(Enum):
@@ -41,7 +46,7 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
     upload_url = '{}/receipt/upload'.format(url)
     status_url = '{}/task/recognition/status'.format(url)
 
-    def __init__(self, seed_tuple, loop, user, **kwargs):
+    def __init__(self, seed_tuple, loop, user, *args, **kwargs):
         """
 
         Args:
@@ -54,19 +59,26 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
         self.loop = loop
         self.user = user
 
-    async def on_chat_message(self, msg):
+        self._is_feedback = False
 
-        content_type, chat_type, chat_id = telepot.glance(msg)
-        logger.info((content_type, chat_type, chat_id))
-
-        if content_type == 'text' and msg['text'] == '/id':
-            await self.sender.sendMessage('Your id is: *{}*'.format(chat_id),
-                                          parse_mode='Markdown')
-        elif content_type != 'photo':
-            await self.sender.sendMessage('send a picture to get it recognized',
-                                          parse_mode='Markdown')
-
-        else:
+    async def _get_response(self, content_type, chat_id, msg):
+        """
+        """
+        resp, reply_markup = None, None
+        if content_type == 'text':
+            text = msg['text']
+            if self._is_feedback:
+                self._is_feedback = False
+            elif text == '/id':
+                resp = 'Your id is: *{}*'.format(chat_id)
+            elif text == '/feedback':
+                self._is_feedback = True
+                resp = 'Enter your feedback:'
+            elif text == '/start':
+                resp = start_msg
+            else:
+                pass
+        elif content_type == 'photo':
             file_id = sorted(msg['photo'], key=image_size)[-1]['file_id']
             await self.sender.sendMessage('Starting reco ...')
             img = BytesIO()
@@ -74,30 +86,53 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
             resp = await self.req(img, 'FR')
 
             is_error = False
+            add_reco(chat_id, resp, img)
+
             if resp['state'] in {'OCR_ERROR', 'PRODUCTS_AREA_NOT_DETECTED', 'STORE_NOT_DETECTED'}:
-                msg = 'An error occurred during the recognition : *%s*' % resp['state'].replace('_', ' ').lower()
+                resp = 'An error occurred during the recognition : *%s*' % resp['state'].replace('_', ' ').lower()
                 is_error = True
             elif resp['state'] == 'FAILURE':
-                msg = 'An internal error happened :('
+                resp = 'An internal error happened :('
                 is_error = True
             else:
-                add_reco(chat_id, resp, img)
-                msg = WisdeatBot.pretty_print_reco(resp)
+                resp = WisdeatBot.pretty_print_reco(resp)
 
-            logger.info(msg)
-            for chunk in get_chunks(msg, 4000):
-                await self.sender.sendMessage(chunk, parse_mode='Markdown')
+            logger.info(resp)
 
             if not is_error:
-                _ = await self.sender.sendMessage(
-                    'How would you rate the recognition ?',
-                    reply_markup=InlineKeyboardMarkup(
+                resp = 'How would you rate the recognition ?'
+                reply_markup = InlineKeyboardMarkup(
                         inline_keyboard=[[
                             InlineKeyboardButton(text='\u2600', callback_data='1'),
                             InlineKeyboardButton(text='\u2600' * 2, callback_data='2'),
                             InlineKeyboardButton(text='\u2600' * 3, callback_data='3')]
-                        ]))
+                        ])
+        else:
+            pass
 
+        return resp, reply_markup
+
+    async def on_chat_message(self, msg):
+
+        content_type, chat_type, chat_id = telepot.glance(msg)
+        logger.info((content_type, chat_type, chat_id))
+
+        print(self._is_feedback)
+
+        to_send, reply_markup = await self._get_response(content_type, chat_id, msg)
+        if not to_send:
+            to_send = 'Send a picture to get it recognized'
+
+        if not reply_markup:
+            for chunk in get_chunks(to_send, 4000):
+                try:
+                    await self.sender.sendMessage(chunk, parse_mode='Markdown')
+                except telepot.exception.TelegramError:
+                    await self.sender.sendMessage(chunk)
+        else:
+            await self.sender.sendMessage(to_send,
+                                          reply_markup=reply_markup,
+                                          parse_mode='Markdown')
         self.close()
 
     @staticmethod
@@ -152,7 +187,7 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
     @staticmethod
     def pretty_print_reco(resp):
         store = '*{type_store}* {city} - {zipcode} - {address}'.format(
-                    type_store=resp['result']['store']['store_type'].title(),
+                    type_store=str(resp['result']['store']['store_type']).title(),
                     **resp['result']['store'])
         products = ['*Products*:']
         for product in resp['result']['products']:
@@ -179,7 +214,7 @@ class RecoManager(telepot.aio.helper.CallbackQueryOriginHandler):
         self.close()
 
     async def on__idle(self, event):
-        await self.editor.editMessageText('', reply_markup=None)
+        await self.editor.deleteMessage()
         self.close()
 
 

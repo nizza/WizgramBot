@@ -30,8 +30,10 @@ def save_feedback(user, feedback, conn):
               .order_by(rdb.desc('uploaded_at'))[0]
               .update({'feedback': int(feedback)})
            )
-
-    return safe_index(req, conn)
+    try:
+        safe_index(req, conn)
+    except rdb.ReqlNonExistenceError:
+        logger.warning('Could not save feedback...')
 
 
 def save_reco(user, reco, img, conn):
@@ -59,7 +61,7 @@ def worker(host, port, db):
             _ = save_reco(user, reco, img, conn)
         else:
             user, feedback = data
-            _ = save_feedback(user, feedback, conn)
+            save_feedback(user, feedback, conn)
 
 
 def start_thread(host, port, db, **kwargs):

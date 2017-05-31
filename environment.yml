@@ -3,7 +3,7 @@ dependencies:
  - python=3.5
  - pytz
  - pip:
-   - telepot
+   - telepot==v12
    - coloredlogs
    - aiohttp
    - rethinkdb
