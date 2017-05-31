@@ -85,13 +85,13 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
         elif content_type == 'photo':
             file_id = sorted(msg['photo'], key=image_size)[-1]['file_id']
             await self.sender.sendMessage('Starting reco ...')
+
             img = BytesIO()
             await self.bot.download_file(file_id, img)
-            resp = await self.req(img, 'FR')
-
+            resp, img_saved = await self.req(img, 'FR')
             is_error = False
-            add_reco(chat_id, resp, img)
 
+            add_reco(chat_id, resp, img_saved)
             if resp['state'] in {'OCR_ERROR', 'PRODUCTS_AREA_NOT_DETECTED', 'STORE_NOT_DETECTED'}:
                 resp = 'An error occurred during the recognition : *%s*' % resp['state'].replace('_', ' ').lower()
                 is_error = True
@@ -104,13 +104,15 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
             logger.info(resp)
 
             if not is_error:
-                resp = 'How would you rate the recognition ?'
-                reply_markup = InlineKeyboardMarkup(
+                reply_markup = (
+                    'How would you rate the recognition ?',
+                    InlineKeyboardMarkup(
                         inline_keyboard=[[
                             InlineKeyboardButton(text='\u2600', callback_data='1'),
                             InlineKeyboardButton(text='\u2600' * 2, callback_data='2'),
                             InlineKeyboardButton(text='\u2600' * 3, callback_data='3')]
                         ])
+                )
         else:
             pass
 
@@ -125,13 +127,13 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
         if not to_send:
             to_send = 'Send a picture to get it recognized'
 
-        if not reply_markup:
-            for chunk in get_chunks(to_send, 4000):
-                try:
-                    await self.sender.sendMessage(chunk, parse_mode='Markdown')
-                except telepot.exception.TelegramError:
-                    await self.sender.sendMessage(chunk)
-        else:
+        for chunk in get_chunks(to_send, 4000):
+            try:
+                await self.sender.sendMessage(chunk, parse_mode='Markdown')
+            except telepot.exception.TelegramError:
+                await self.sender.sendMessage(chunk)
+        if reply_markup:
+            to_send, reply_markup = reply_markup
             await self.sender.sendMessage(to_send,
                                           reply_markup=reply_markup,
                                           parse_mode='Markdown')
@@ -168,6 +170,7 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
         return status, resp
 
     async def req(self, img, country, timeout=10):
+        img_saved = BytesIO(img.read())
         async with aiohttp.ClientSession(loop=self.loop) as session:
             status, resp = await self.login(session, timeout=timeout)
             if status != API.SUCCESS_LOGIN.value:
@@ -186,7 +189,7 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
             else:
                 raise RecoFailedError()
 
-        return resp
+        return resp, img_saved
 
     @staticmethod
     def pretty_print_reco(resp):
