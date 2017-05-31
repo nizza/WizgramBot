@@ -171,8 +171,8 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
         return status, resp
 
     async def req(self, img, country, timeout=10):
+        img.seek(0)
         img_saved = BytesIO(img.read())
-        img_saved.seek(0)
         async with aiohttp.ClientSession(loop=self.loop) as session:
             status, resp = await self.login(session, timeout=timeout)
             if status != API.SUCCESS_LOGIN.value:
