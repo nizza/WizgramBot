@@ -240,7 +240,7 @@ class UserHandler(telepot.aio.DelegatorBot):
         }
         super().__init__(token,  [
             pave_event_space()(
-                per_chat_id(), create_open, WisdeatBot, loop, user, timeout=60),
+                per_chat_id(), create_open, WisdeatBot, loop, user, timeout=180),
             pave_event_space()(
                 per_callback_query_origin(), create_open, RecoManager, timeout=120),
         ], loop=loop)
