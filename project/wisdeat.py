@@ -162,7 +162,7 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
         resp = await resp.json()
         return status, resp
 
-    async def login(self, session, timeout=10):
+    async def login(self, session, timeout=30):
         with async_timeout.timeout(timeout):
             resp = await session.post(WisdeatBot.login_url,
                                       data=json.dumps(self.user))
@@ -170,7 +170,7 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
         resp = await resp.json()
         return status, resp
 
-    async def req(self, img, country, timeout=10):
+    async def req(self, img, country, timeout=30):
         img.seek(0)
         img_saved = BytesIO(img.read())
         async with aiohttp.ClientSession(loop=self.loop) as session:
