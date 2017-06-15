@@ -88,7 +88,11 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
 
             img = BytesIO()
             await self.bot.download_file(file_id, img)
-            resp, img_saved = await self.req(img, 'FR')
+            try:
+                resp, img_saved = await self.req(img, 'FR')
+            except RecoFailedError;
+                resp = {'state': 'FAILURE'}
+
             is_error = False
 
             add_reco(chat_id, resp, img_saved)
