@@ -14,16 +14,10 @@ from io import BytesIO
 from .logs import logger
 from .dbs import add_reco, add_feedback, add_app_feedback
 from .utils import get_chunks
+from . import langs
 
 image_size = itemgetter('file_size')
 
-start_msg = """
-Functionalities and commands:
-
-1. Upload a picture of a receipt to get it recognized
-2. `/id` to get your Telegram ID and sync all your receipts with the website (in the __Profile__ section)
-3. `/feedback` to send us your feedback on the app!
-"""
 
 
 class API(Enum):
@@ -36,6 +30,9 @@ class NoAuthError(Exception):
 
 
 class RecoFailedError(Exception):
+    pass
+
+class ServerDownError(Exception):
     pass
 
 
@@ -58,7 +55,7 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
         super().__init__(seed_tuple, **kwargs)
         self.loop = loop
         self.user = user
-
+        self.msgs = langs.MESSAGES['EN']
         self._is_feedback = False
 
     async def _get_response(self, content_type, chat_id, msg):
@@ -72,36 +69,40 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
                 self._is_feedback = False
                 if text:
                     add_app_feedback(chat_id, text)
-                    resp = 'Well noted! Thanks :)'
+                    resp = self.msgs['feedback_resp']
             elif text == '/id':
-                resp = 'Your id is: *{}*'.format(chat_id)
+                resp = self.msgs['id'].format(chat_id)
             elif text == '/feedback':
                 self._is_feedback = True
-                resp = 'Enter your feedback:'
+                resp = self.msgs['feedback']
             elif text == '/start':
-                resp = start_msg
+                resp = self.msgs['start_msg']
             else:
                 pass
         elif content_type == 'photo':
             file_id = sorted(msg['photo'], key=image_size)[-1]['file_id']
-            await self.sender.sendMessage('Starting reco ...')
+            await self.sender.sendMessage(self.msgs['start_reco'])
 
             img = BytesIO()
             await self.bot.download_file(file_id, img)
             try:
                 resp, img_saved = await self.req(img, 'FR')
-            except RecoFailedError:
-                resp = {'state': 'FAILURE'}
+            except (RecoFailedError, ServerDownError):
+                resp = {'state': 'SERVER_ERROR'}
+            else:
+                add_reco(chat_id, resp, img_saved)
 
             is_error = False
 
-            add_reco(chat_id, resp, img_saved)
             if resp['state'] in {'OCR_ERROR', 'PRODUCTS_AREA_NOT_DETECTED', 'STORE_NOT_DETECTED'}:
-                resp = 'An error occurred during the recognition : *%s*' % resp['state'].replace('_', ' ').lower()
+                resp = self.msgs['reco_error_1'].format(resp['state'].replace('_', ' ').lower())
                 is_error = True
             elif resp['state'] == 'FAILURE':
-                resp = 'An internal error happened :('
+                resp = self.msgs['reco_error_2']
                 is_error = True
+            elif resp['state'] == 'SERVER_ERROR':
+                resp = self.msgs['reco_error_3']
+
             else:
                 resp = WisdeatBot.pretty_print_reco(resp)
 
@@ -109,7 +110,7 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
 
             if not is_error:
                 reply_markup = (
-                    'How would you rate the recognition ?',
+                    self.msgs['reco_rating'],
                     InlineKeyboardMarkup(
                         inline_keyboard=[[
                             InlineKeyboardButton(text='\u2600', callback_data='1'),
@@ -129,7 +130,7 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
 
         to_send, reply_markup = await self._get_response(content_type, chat_id, msg)
         if not to_send:
-            to_send = 'Send a picture to get it recognized'
+            to_send = self.msgs['default_msg']
 
         for chunk in get_chunks(to_send, 4000):
             try:
@@ -178,7 +179,11 @@ class WisdeatBot(telepot.aio.helper.ChatHandler):
         img.seek(0)
         img_saved = BytesIO(img.read())
         async with aiohttp.ClientSession(loop=self.loop) as session:
-            status, resp = await self.login(session, timeout=timeout)
+            try:
+                status, resp = await self.login(session, timeout=timeout)
+            except aiohttp.ClientOSError:
+                raise ServerDownError()
+
             if status != API.SUCCESS_LOGIN.value:
                 raise NoAuthError(resp['message'])
 

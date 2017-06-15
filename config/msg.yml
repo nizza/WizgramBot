@@ -1,0 +1,50 @@
+start_msg:
+  EN: >
+    Functionalities and commands:
+
+    1. Upload a picture of a receipt to get it recognized
+    2. `/id` to get your Telegram ID and sync all your receipts with the website (in the __Profile__ section)
+    3. `/feedback` to send us your feedback on the app!
+
+  FR: >
+    Fonctionalités et commandes:
+
+    1. Envoyer une photo d'un ticket de caisse pour le reconnaitre
+    2. `/id` pour obtenir votre Telegram ID et synchroniser tous vos tickets avec le site web ( dans la section __Profile__)
+    3. `/feedback` pour nous envoyer votre avis sur l'application !
+
+default_msg:
+  FR: 'Envoyez une image pour la faire reconnaitre'
+  EN: 'Send a picture to get it recognized'
+
+start_reco:
+  FR: 'Début de la reconnaissance...'
+  EN: 'Starting recognition...'
+
+reco_rating:
+  FR: 'Comment noteriez vous la reconnaissance ?'
+  EN: 'How would you rate the recognition ?'
+
+feedback:
+  FR: 'Entrez votra avis'
+  EN: 'Enter your feedback:'
+
+feedback_resp:
+  FR: 'Bien noté! Merci :)'
+  EN: 'Well noted! Thanks :)'
+
+id:
+  FR: 'Votre id est: **{}**'
+  EN: 'Your id is: **{}**'
+
+reco_error_1:
+  FR: "Une erreur s'est produite pendant la reconnaissance: *{}*"
+  EN: 'An error occurred during the recognition : *{}*'
+
+reco_error_2:
+  FR: "Une erreur interne s'est produite"
+  EN: 'An internal error happened :('
+
+reco_error_3:
+  FR: "Le serveur n'est pas disponible pour le moment, réessayer plus tard!"
+  EN: 'The server is not available for the moment, retry later !'
